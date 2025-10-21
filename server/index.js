@@ -7,6 +7,7 @@ const litellm = require('litellm');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
+const { PDFParse } = require('pdf-parse');
 require('dotenv').config();
 
 // Logging functionality
@@ -271,6 +272,24 @@ app.post('/api/chats/:chatId/messages', upload.single('file'), async (req, res) 
       if (file.mimetype.startsWith('text/') || file.originalname.endsWith('.md')) {
         fileContent = fs.readFileSync(file.path, 'utf8');
       }
+      // Extract text from PDF files
+      else if (file.mimetype === 'application/pdf' || file.originalname.endsWith('.pdf')) {
+        try {
+          const dataBuffer = fs.readFileSync(file.path);
+          // Convert Buffer to Uint8Array for pdf-parse
+          const uint8Array = new Uint8Array(dataBuffer);
+          const parser = new PDFParse({ data: uint8Array });
+          const pdfData = await parser.getText();
+          fileContent = `PDF Content (${pdfData.total} pages):\n${pdfData.text}`;
+        } catch (error) {
+          console.error('Error parsing PDF:', error);
+          fileContent = `[PDF file uploaded but could not be parsed: ${file.originalname}]`;
+        }
+      }
+      // Handle other file types
+      else {
+        fileContent = `[File uploaded: ${file.originalname} (${file.mimetype}) - Content extraction not supported for this file type]`;
+      }
     }
 
     const userContent = file ? `${message}\n\nFile: ${file.originalname}\n${fileContent}` : message;
@@ -367,10 +386,14 @@ app.post('/api/chats/:chatId/messages', upload.single('file'), async (req, res) 
           else if (temp <= 1.0) effort = "medium";
           else effort = "high";
           
-          const requestMessages = [
+          // Create conversation history with the current message including PDF content
+          const conversationHistory = [
             { role: "system", content: settings.system_message || "You are a helpful assistant." },
-            ...messages.map(msg => ({ role: msg.role, content: msg.content }))
+            ...messages.slice(0, -1).map(msg => ({ role: msg.role, content: msg.content })),
+            { role: "user", content: userContent }
           ];
+          
+          const requestMessages = conversationHistory;
           
           try {
             // Try GPT-5 specific parameters first
@@ -463,10 +486,15 @@ app.post('/api/chats/:chatId/messages', upload.single('file'), async (req, res) 
         } else {
           // Use LiteLLM for other models and providers
           const startTime = Date.now();
-          const requestMessages = [
+          
+          // Create conversation history with the current message including PDF content
+          const conversationHistory = [
             { role: "system", content: settings.system_message || "You are a helpful assistant." },
-            ...messages.map(msg => ({ role: msg.role, content: msg.content }))
+            ...messages.slice(0, -1).map(msg => ({ role: msg.role, content: msg.content })),
+            { role: "user", content: userContent }
           ];
+          
+          const requestMessages = conversationHistory;
           
           let completionParams = {
             model: model,

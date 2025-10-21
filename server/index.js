@@ -281,6 +281,9 @@ app.post('/api/chats/:chatId/messages', upload.single('file'), async (req, res) 
           const parser = new PDFParse({ data: uint8Array });
           const pdfData = await parser.getText();
           fileContent = `PDF Content (${pdfData.total} pages):\n${pdfData.text}`;
+          
+          // Log the extracted PDF content for debugging
+          console.log(`PDF extracted content from ${file.originalname}:`, pdfData.text.substring(0, 500) + (pdfData.text.length > 500 ? '...' : ''));
         } catch (error) {
           console.error('Error parsing PDF:', error);
           fileContent = `[PDF file uploaded but could not be parsed: ${file.originalname}]`;
@@ -301,8 +304,8 @@ app.post('/api/chats/:chatId/messages', upload.single('file'), async (req, res) 
         if (err) {
           console.error('Error saving user message:', err);
         } else {
-          // Log user message
-          logMessage(chatId, 'user', message, file?.originalname);
+          // Log user message with file content if present
+          logMessage(chatId, 'user', userContent, file?.originalname);
         }
       }
     );

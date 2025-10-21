@@ -289,6 +289,25 @@ app.post('/api/chats/:chatId/messages', upload.single('file'), async (req, res) 
           fileContent = `[PDF file uploaded but could not be parsed: ${file.originalname}]`;
         }
       }
+      // Handle image files with base64 encoding
+      else if (file.mimetype.startsWith('image/')) {
+        try {
+          const dataBuffer = fs.readFileSync(file.path);
+          const base64Image = dataBuffer.toString('base64');
+          const imageFormat = file.mimetype.split('/')[1]; // jpeg, png, etc.
+          const fullBase64Data = `data:image/${imageFormat};base64,${base64Image}`;
+          
+          // For GPT-5 models that support images, we'll use the full base64 data
+          // For logging and other models, we'll use a truncated version
+          fileContent = `[Image: ${file.originalname} (${file.mimetype}) - Base64 encoded: ${fullBase64Data}]`;
+          
+          // Log image upload for debugging
+          console.log(`Image uploaded: ${file.originalname} (${file.mimetype}), size: ${dataBuffer.length} bytes, base64 length: ${base64Image.length}`);
+        } catch (error) {
+          console.error('Error processing image:', error);
+          fileContent = `[Image file uploaded but could not be processed: ${file.originalname}]`;
+        }
+      }
       // Handle other file types
       else {
         fileContent = `[File uploaded: ${file.originalname} (${file.mimetype}) - Content extraction not supported for this file type]`;
@@ -389,14 +408,46 @@ app.post('/api/chats/:chatId/messages', upload.single('file'), async (req, res) 
           else if (temp <= 1.0) effort = "medium";
           else effort = "high";
           
-          // Create conversation history with the current message including PDF content
+          // Create conversation history with the current message including file content
           const conversationHistory = [
             { role: "system", content: settings.system_message || "You are a helpful assistant." },
             ...messages.slice(0, -1).map(msg => ({ role: msg.role, content: msg.content })),
             { role: "user", content: userContent }
           ];
           
-          const requestMessages = conversationHistory;
+          let requestMessages = conversationHistory;
+          
+          // Check if the current message contains an image and format for GPT-5 multimodal input
+          if (file && file.mimetype.startsWith('image/')) {
+            try {
+              const dataBuffer = fs.readFileSync(file.path);
+              const base64Image = dataBuffer.toString('base64');
+              const imageFormat = file.mimetype.split('/')[1];
+              
+              // Format for GPT-5 multimodal input
+              requestMessages = [
+                { role: "system", content: settings.system_message || "You are a helpful assistant." },
+                ...messages.slice(0, -1).map(msg => ({ role: msg.role, content: msg.content })),
+                {
+                  role: "user",
+                  content: [
+                    { type: "text", text: message },
+                    { 
+                      type: "image_url", 
+                      image_url: {
+                        url: `data:image/${imageFormat};base64,${base64Image}`
+                      }
+                    }
+                  ]
+                }
+              ];
+              console.log(`Formatted image for GPT-5 multimodal input: ${file.originalname}`);
+            } catch (error) {
+              console.error('Error formatting image for GPT-5:', error);
+              // Fall back to text-only format
+              requestMessages = conversationHistory;
+            }
+          }
           
           try {
             // Try GPT-5 specific parameters first
@@ -490,14 +541,46 @@ app.post('/api/chats/:chatId/messages', upload.single('file'), async (req, res) 
           // Use LiteLLM for other models and providers
           const startTime = Date.now();
           
-          // Create conversation history with the current message including PDF content
+          // Create conversation history with the current message including file content
           const conversationHistory = [
             { role: "system", content: settings.system_message || "You are a helpful assistant." },
             ...messages.slice(0, -1).map(msg => ({ role: msg.role, content: msg.content })),
             { role: "user", content: userContent }
           ];
           
-          const requestMessages = conversationHistory;
+          let requestMessages = conversationHistory;
+          
+          // Check if the current message contains an image and format for multimodal input
+          if (file && file.mimetype.startsWith('image/')) {
+            try {
+              const dataBuffer = fs.readFileSync(file.path);
+              const base64Image = dataBuffer.toString('base64');
+              const imageFormat = file.mimetype.split('/')[1];
+              
+              // Format for multimodal input (LiteLLM supports this format for compatible models)
+              requestMessages = [
+                { role: "system", content: settings.system_message || "You are a helpful assistant." },
+                ...messages.slice(0, -1).map(msg => ({ role: msg.role, content: msg.content })),
+                {
+                  role: "user",
+                  content: [
+                    { type: "text", text: message },
+                    { 
+                      type: "image_url", 
+                      image_url: {
+                        url: `data:image/${imageFormat};base64,${base64Image}`
+                      }
+                    }
+                  ]
+                }
+              ];
+              console.log(`Formatted image for multimodal input: ${file.originalname}`);
+            } catch (error) {
+              console.error('Error formatting image for multimodal input:', error);
+              // Fall back to text-only format
+              requestMessages = conversationHistory;
+            }
+          }
           
           let completionParams = {
             model: model,

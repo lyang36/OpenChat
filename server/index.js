@@ -8,6 +8,11 @@ const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
 const { PDFParse } = require('pdf-parse');
+
+
+const { exec } = require('child_process');
+const util = require('util');
+const execPromise = util.promisify(exec);
 require('dotenv').config();
 
 // Logging functionality
@@ -272,21 +277,49 @@ app.post('/api/chats/:chatId/messages', upload.single('file'), async (req, res) 
       if (file.mimetype.startsWith('text/') || file.originalname.endsWith('.md')) {
         fileContent = fs.readFileSync(file.path, 'utf8');
       }
-      // Extract text from PDF files
+      // Extract text and images from PDF files using Python PyMuPDF
       else if (file.mimetype === 'application/pdf' || file.originalname.endsWith('.pdf')) {
         try {
-          const dataBuffer = fs.readFileSync(file.path);
-          // Convert Buffer to Uint8Array for pdf-parse
-          const uint8Array = new Uint8Array(dataBuffer);
-          const parser = new PDFParse({ data: uint8Array });
-          const pdfData = await parser.getText();
-          fileContent = `PDF Content (${pdfData.total} pages):\n${pdfData.text}`;
+          // Use Python script for robust PDF text and image extraction
+          const { stdout, stderr } = await execPromise(`python3 pdf_processor.py "${file.path}"`);
+          const pdfResult = JSON.parse(stdout);
           
-          // Log the extracted PDF content for debugging
-          console.log(`PDF extracted content from ${file.originalname}:`, pdfData.text.substring(0, 500) + (pdfData.text.length > 500 ? '...' : ''));
+          if (pdfResult.success) {
+            let pdfSummary = `PDF Content (${pdfResult.total_pages} pages):\n${pdfResult.full_text}`;
+            
+            if (pdfResult.total_images > 0) {
+              pdfSummary += `\n\n[Contains ${pdfResult.total_images} embedded image(s)]`;
+              console.log(`PDF ${file.originalname} contains ${pdfResult.total_images} embedded images`);
+              
+              // Include first image as base64 preview
+              const firstImage = pdfResult.pages.flatMap(p => p.images)[0];
+              if (firstImage) {
+                pdfSummary += `\n[First image preview (page ${firstImage.page}): data:${firstImage.mime_type};base64,${firstImage.base64.substring(0, 100)}...]`;
+              }
+            } else {
+              pdfSummary += `\n\n[No embedded images found in PDF]`;
+            }
+            
+            fileContent = pdfSummary;
+            console.log(`PDF ${file.originalname} processed - ${pdfResult.total_pages} pages, ${pdfResult.total_images} images`);
+            console.log(`PDF extracted content:`, pdfResult.full_text.substring(0, 500) + (pdfResult.full_text.length > 500 ? '...' : ''));
+          } else {
+            throw new Error(pdfResult.error);
+          }
         } catch (error) {
-          console.error('Error parsing PDF:', error);
-          fileContent = `[PDF file uploaded but could not be parsed: ${file.originalname}]`;
+          console.error('Error parsing PDF with Python processor:', error);
+          // Fallback to JavaScript PDF parsing
+          try {
+            const dataBuffer = fs.readFileSync(file.path);
+            const uint8Array = new Uint8Array(dataBuffer);
+            const parser = new PDFParse({ data: uint8Array });
+            const pdfData = await parser.getText();
+            fileContent = `PDF Content (${pdfData.total} pages):\n${pdfData.text}\n\n[Note: Advanced image extraction unavailable]`;
+            console.log(`PDF ${file.originalname} processed with fallback - text only`);
+          } catch (fallbackError) {
+            console.error('Fallback PDF parsing also failed:', fallbackError);
+            fileContent = `[PDF file uploaded but could not be parsed: ${file.originalname}]`;
+          }
         }
       }
       // Handle image files with base64 encoding

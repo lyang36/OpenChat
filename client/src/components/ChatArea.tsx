@@ -2,13 +2,14 @@ import React, { useEffect, useRef } from 'react';
 import { Message } from '../types';
 import { ChatMessage } from './ChatMessage';
 import { MessageInput } from './MessageInput';
-import { Loader } from 'lucide-react';
+import { Loader, Menu } from 'lucide-react';
 
 interface ChatAreaProps {
   messages: Message[];
   onSendMessage: (message: string, file?: File) => void;
   loading?: boolean;
   currentChatId: string | null;
+  onToggleSidebar: () => void;
 }
 
 export const ChatArea: React.FC<ChatAreaProps> = ({
@@ -16,6 +17,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   onSendMessage,
   loading,
   currentChatId,
+  onToggleSidebar,
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -29,14 +31,27 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   if (!currentChatId) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <h2 className="text-2xl font-semibold text-gray-700 mb-2">
-            Welcome to ChatGPT Clone
-          </h2>
-          <p className="text-gray-500">
-            Select a chat from the sidebar or create a new one to get started.
-          </p>
+      <div className="flex-1 flex flex-col bg-gray-50">
+        {/* Mobile Header */}
+        <div className="lg:hidden flex items-center p-4 bg-white border-b">
+          <button
+            onClick={onToggleSidebar}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+          >
+            <Menu size={20} />
+          </button>
+          <h1 className="ml-3 text-lg font-semibold text-gray-800">ChatGPT Clone</h1>
+        </div>
+        
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center px-4">
+            <h2 className="text-xl lg:text-2xl font-semibold text-gray-700 mb-2">
+              Welcome to ChatGPT Clone
+            </h2>
+            <p className="text-gray-500 text-sm lg:text-base">
+              Select a chat from the sidebar or create a new one to get started.
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -44,6 +59,17 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   return (
     <div className="flex-1 flex flex-col">
+      {/* Mobile Header */}
+      <div className="lg:hidden flex items-center p-4 bg-white border-b">
+        <button
+          onClick={onToggleSidebar}
+          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+        >
+          <Menu size={20} />
+        </button>
+        <h1 className="ml-3 text-lg font-semibold text-gray-800">Chat</h1>
+      </div>
+      
       {/* Messages Area */}
       <div className="flex-1 overflow-y-auto">
         {messages.length === 0 ? (

@@ -35,14 +35,14 @@ export const MessageInput: React.FC<MessageInputProps> = ({ onSendMessage, disab
   };
 
   return (
-    <div className="border-t bg-white p-4">
+    <div className="border-t bg-white p-3 lg:p-4">
       {selectedFile && (
         <div className="mb-2 flex items-center gap-2 text-sm text-gray-600 bg-gray-100 p-2 rounded">
           <Paperclip size={14} />
-          <span className="flex-1">{selectedFile.name}</span>
+          <span className="flex-1 truncate">{selectedFile.name}</span>
           <button
             onClick={removeFile}
-            className="p-1 hover:bg-gray-200 rounded"
+            className="p-1 hover:bg-gray-200 rounded flex-shrink-0"
           >
             <X size={14} />
           </button>
@@ -61,10 +61,10 @@ export const MessageInput: React.FC<MessageInputProps> = ({ onSendMessage, disab
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+          className="p-2 lg:p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors touch-manipulation"
           disabled={disabled}
         >
-          <Paperclip size={20} />
+          <Paperclip size={18} className="lg:w-5 lg:h-5" />
         </button>
         
         <div className="flex-1 relative">
@@ -72,7 +72,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({ onSendMessage, disab
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             placeholder="Type your message..."
-            className="w-full p-3 pr-12 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full p-3 pr-12 border border-gray-300 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-base"
             rows={1}
             style={{ minHeight: '44px', maxHeight: '120px' }}
             onKeyDown={(e) => {
@@ -87,7 +87,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({ onSendMessage, disab
           <button
             type="submit"
             disabled={disabled || (!message.trim() && !selectedFile)}
-            className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 text-blue-500 hover:text-blue-700 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors"
+            className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 text-blue-500 hover:text-blue-700 disabled:text-gray-400 disabled:cursor-not-allowed transition-colors touch-manipulation"
           >
             <Send size={16} />
           </button>

@@ -11,6 +11,7 @@ function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Load chats on component mount
   useEffect(() => {
@@ -56,6 +57,7 @@ function App() {
 
   const handleSelectChat = (chatId: string) => {
     setCurrentChatId(chatId);
+    setSidebarOpen(false); // Close sidebar on mobile after selecting chat
   };
 
   const handleDeleteChat = async (chatId: string) => {
@@ -103,7 +105,15 @@ function App() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="flex h-screen bg-gray-100 relative">
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+      
       <Sidebar
         chats={chats}
         currentChatId={currentChatId}
@@ -112,12 +122,15 @@ function App() {
         onDeleteChat={handleDeleteChat}
         onUpdateChatTitle={handleUpdateChatTitle}
         onOpenSettings={() => setShowSettings(true)}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
       <ChatArea
         messages={messages}
         onSendMessage={handleSendMessage}
         loading={loading}
         currentChatId={currentChatId}
+        onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
       />
       <Settings
         isOpen={showSettings}

@@ -10,6 +10,8 @@ interface SidebarProps {
   onDeleteChat: (chatId: string) => void;
   onUpdateChatTitle: (chatId: string, title: string) => void;
   onOpenSettings: () => void;
+  isOpen: boolean;
+  onClose: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -20,6 +22,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onDeleteChat,
   onUpdateChatTitle,
   onOpenSettings,
+  isOpen,
+  onClose,
 }) => {
   const [editingChatId, setEditingChatId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
@@ -43,12 +47,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   return (
-    <div className="w-64 bg-gray-900 text-white flex flex-col h-full">
+    <div className={`
+      fixed lg:relative lg:translate-x-0 z-50
+      w-64 bg-gray-900 text-white flex flex-col h-full
+      transition-transform duration-300 ease-in-out
+      ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+    `}>
       {/* Header */}
       <div className="p-4 border-b border-gray-700">
         <button
           onClick={onCreateChat}
-          className="w-full flex items-center gap-2 px-3 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors"
+          className="w-full flex items-center gap-2 px-3 py-3 lg:py-2 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors touch-manipulation"
         >
           <Plus size={16} />
           New Chat
@@ -60,7 +69,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {chats.map((chat) => (
           <div
             key={chat.id}
-            className={`group relative flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${
+            className={`group relative flex items-center gap-2 p-3 lg:p-2 rounded-lg cursor-pointer transition-colors touch-manipulation ${
               currentChatId === chat.id
                 ? 'bg-gray-700'
                 : 'hover:bg-gray-800'
@@ -132,7 +141,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="p-4 border-t border-gray-700">
         <button
           onClick={onOpenSettings}
-          className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-800 rounded-lg transition-colors text-gray-300 hover:text-white"
+          className="w-full flex items-center gap-2 px-3 py-3 lg:py-2 hover:bg-gray-800 rounded-lg transition-colors text-gray-300 hover:text-white touch-manipulation"
         >
           <Settings size={16} />
           Settings

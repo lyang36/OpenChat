@@ -81,8 +81,7 @@ A full-featured ChatGPT-like platform built with React, Node.js, and OpenAI's AP
 
 ## 🌐 Access the Application
 
-The application is currently running at:
-**https://app-2-runtime-cpqhovvammucfkds-worker1.prod-runtime.app.kepilot.ai**
+The application will be accessible at `http://localhost:12003` when running locally, or at your deployment URL when deployed to a server.
 
 ## 📖 Usage Guide
 
@@ -279,8 +278,7 @@ The application is configured to run in production mode with:
 
 ### Current Deployment Status
 
-✅ **Live Demo Available**: The application is currently deployed and accessible at:
-- **URL**: https://app-2-runtime-cpqhovvammucfkds-worker1.prod-runtime.app.kepilot.ai
+✅ **Application Features**:
 - **Status**: Fully functional with GPT-5 support and intelligent parameter handling
 - **GPT-5 Integration**: ✅ Successfully integrated with October 2025 token limits (128K output, 400K total)
 - **Features**: All features working including chat management, file uploads, settings, and enhanced API logging

@@ -1,8 +1,10 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Message } from '../types';
 import { ChatMessage } from './ChatMessage';
 import { MessageInput } from './MessageInput';
+import ACEStatus from './ACEStatus';
 import { Loader, Menu } from 'lucide-react';
+import { chatApi } from '../api';
 
 interface ChatAreaProps {
   messages: Message[];
@@ -10,6 +12,11 @@ interface ChatAreaProps {
   loading?: boolean;
   currentChatId: string | null;
   onToggleSidebar: () => void;
+  aceStats?: {
+    reflection: string | null;
+    learned_strategies: number;
+    playbook_size: number;
+  };
 }
 
 export const ChatArea: React.FC<ChatAreaProps> = ({
@@ -18,8 +25,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   loading,
   currentChatId,
   onToggleSidebar,
+  aceStats,
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [aceEnabled, setAceEnabled] = useState(false);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -28,6 +37,19 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    const checkACEStatus = async () => {
+      try {
+        const settings = await chatApi.getSettings();
+        setAceEnabled(settings.ace_enabled === 'true');
+      } catch (error) {
+        console.error('Failed to check ACE status:', error);
+      }
+    };
+
+    checkACEStatus();
+  }, [currentChatId]);
 
   if (!currentChatId) {
     return (
@@ -85,6 +107,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           </div>
         ) : (
           <div>
+            {/* ACE Status */}
+            <div className="p-4">
+              <ACEStatus 
+                chatId={currentChatId} 
+                aceEnabled={aceEnabled} 
+                aceStats={aceStats} 
+              />
+            </div>
+            
             {messages.map((message) => (
               <ChatMessage key={message.id} message={message} />
             ))}

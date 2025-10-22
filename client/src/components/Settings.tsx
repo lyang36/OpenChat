@@ -15,7 +15,9 @@ const SettingsComponent: React.FC<SettingsProps> = ({ isOpen, onClose }) => {
     model: 'gpt-4',
     temperature: '0.7',
     max_tokens: '2000',
-    system_message: 'You are a helpful assistant.'
+    system_message: 'You are a helpful assistant.',
+    ace_enabled: 'false',
+    ace_model: 'gpt-4o-mini'
   });
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -271,6 +273,72 @@ const SettingsComponent: React.FC<SettingsProps> = ({ isOpen, onClose }) => {
                 <p className="text-xs text-gray-500 mt-1">
                   This message sets the behavior and personality of the AI assistant
                 </p>
+              </div>
+
+              {/* ACE Settings */}
+              <div className="border-t pt-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">
+                  🧠 Agentic Context Engine (ACE)
+                </h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  ACE enables your AI to learn from conversations and improve over time. It analyzes what works and what doesn't, building a knowledge base of strategies.
+                </p>
+                
+                {/* ACE Enable/Disable */}
+                <div className="mb-4">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={settings.ace_enabled === 'true'}
+                      onChange={(e) => handleInputChange('ace_enabled', e.target.checked ? 'true' : 'false')}
+                      className="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                    />
+                    <span className="ml-2 text-sm font-medium text-gray-700">
+                      Enable Agentic Context Engine
+                    </span>
+                  </label>
+                  <p className="text-xs text-gray-500 mt-1">
+                    When enabled, the AI will learn from each conversation to improve future responses
+                  </p>
+                </div>
+
+                {/* ACE Model Selection */}
+                {settings.ace_enabled === 'true' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      ACE Model
+                    </label>
+                    <select
+                      value={settings.ace_model}
+                      onChange={(e) => handleInputChange('ace_model', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="gpt-4o-mini">GPT-4o Mini (Recommended)</option>
+                      <option value="gpt-4o">GPT-4o</option>
+                      <option value="gpt-4">GPT-4</option>
+                      <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Model used for ACE's reflection and learning processes. GPT-4o Mini offers the best balance of performance and cost.
+                    </p>
+                  </div>
+                )}
+
+                {/* ACE Info */}
+                {settings.ace_enabled === 'true' && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-md p-3 mt-4">
+                    <h4 className="text-sm font-medium text-blue-800 mb-2">How ACE Works</h4>
+                    <ul className="text-xs text-blue-700 space-y-1">
+                      <li>• <strong>Generator:</strong> Creates responses using learned strategies</li>
+                      <li>• <strong>Reflector:</strong> Analyzes what worked well and what didn't</li>
+                      <li>• <strong>Curator:</strong> Updates the knowledge base with new insights</li>
+                      <li>• <strong>Playbook:</strong> Stores learned strategies for future use</li>
+                    </ul>
+                    <p className="text-xs text-blue-600 mt-2 font-medium">
+                      Each chat maintains its own learning context and improves independently.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Message */}

@@ -8,7 +8,7 @@ const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
 // PDF processing handled by PyMuPDF via Python script
-
+const { ACEManager } = require('./ace_integration');
 
 const { exec } = require('child_process');
 const util = require('util');
@@ -198,6 +198,16 @@ db.serialize(() => {
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
+  // ACE Playbooks table - stores learned strategies per chat
+  db.run(`CREATE TABLE IF NOT EXISTS ace_playbooks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chat_id TEXT NOT NULL,
+    playbook_data TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (chat_id) REFERENCES chats (id) ON DELETE CASCADE
+  )`);
+
   // Insert default settings if they don't exist
   db.run(`INSERT OR IGNORE INTO settings (key, value) VALUES 
     ('openai_api_key', ''),
@@ -205,9 +215,64 @@ db.serialize(() => {
     ('model', 'gpt-5'),
     ('temperature', '0.7'),
     ('max_tokens', '32000'),
-    ('system_message', 'You are a helpful assistant.')
+    ('system_message', 'You are a helpful assistant.'),
+    ('ace_enabled', 'false'),
+    ('ace_model', 'gpt-4o-mini')
   `);
 });
+
+// Initialize ACE Manager
+let aceManager = null;
+
+// Function to initialize or update ACE Manager
+function initializeACEManager() {
+  return new Promise((resolve) => {
+    db.all('SELECT key, value FROM settings WHERE key IN (?, ?, ?)', 
+      ['openai_api_key', 'ace_enabled', 'ace_model'], 
+      (err, rows) => {
+        if (err) {
+          console.error('Failed to load ACE settings:', err);
+          resolve(false);
+          return;
+        }
+
+        const settings = {};
+        rows.forEach(row => {
+          settings[row.key] = row.value;
+        });
+
+        const aceEnabled = settings.ace_enabled === 'true';
+        const apiKey = settings.openai_api_key || process.env.OPENAI_API_KEY;
+        const aceModel = settings.ace_model || 'gpt-4o-mini';
+
+        if (aceEnabled && apiKey) {
+          try {
+            aceManager = new ACEManager(apiKey, aceModel, logApiCall);
+            const initialized = aceManager.initialize();
+            if (initialized) {
+              console.log('ACE Manager initialized successfully');
+            } else {
+              console.log('ACE Manager initialization failed');
+              aceManager = null;
+            }
+            resolve(initialized);
+          } catch (error) {
+            console.error('ACE Manager initialization error:', error);
+            aceManager = null;
+            resolve(false);
+          }
+        } else {
+          aceManager = null;
+          console.log('ACE disabled or no API key available');
+          resolve(false);
+        }
+      }
+    );
+  });
+}
+
+// Initialize ACE on startup
+initializeACEManager();
 
 // Routes
 
@@ -414,8 +479,69 @@ app.post('/api/chats/:chatId/messages', upload.single('file'), async (req, res) 
     // console.log('Debug - final apiKey:', apiKey ? `"${apiKey.substring(0, 10)}..."` : 'EMPTY');
     
     let assistantMessage;
+    let aceUsed = false;
+    let aceStats = null;
+    let enhancedSystemMessage = null;
+    let acePlaybook = null;
     
-    if (!apiKey || apiKey.trim() === '' || apiKey === 'demo') {
+    // Check if ACE is enabled and use it for context enhancement
+    if (settings.ace_enabled === 'true' && aceManager && apiKey && apiKey.trim() !== '' && apiKey !== 'demo') {
+      try {
+        console.log(`Attempting ACE context enhancement for chat ${chatId}`);
+        
+        // Load existing playbook for this chat
+        const existingPlaybook = await new Promise((resolve) => {
+          db.get(
+            'SELECT playbook_data FROM ace_playbooks WHERE chat_id = ? ORDER BY updated_at DESC LIMIT 1',
+            [chatId],
+            (err, row) => {
+              if (err) {
+                console.error('Error loading playbook:', err);
+                resolve(null);
+              } else {
+                resolve(row ? JSON.parse(row.playbook_data) : null);
+              }
+            }
+          );
+        });
+        
+        if (existingPlaybook) {
+          aceManager.loadPlaybook(chatId, existingPlaybook);
+        }
+        
+        // Prepare conversation history for ACE
+        const conversationHistory = messages.slice(0, -1); // Exclude the current user message
+        
+        // Get enhanced context from ACE
+        const aceResult = await aceManager.enhanceContextWithACE(chatId, userContent, conversationHistory);
+        
+        if (aceResult.success) {
+          enhancedSystemMessage = aceResult.enhancedSystemMessage;
+          acePlaybook = aceResult.playbook;
+          aceUsed = true;
+          aceStats = {
+            strategies_used: aceResult.strategiesUsed,
+            context_comparison: aceResult.contextComparison
+          };
+          
+          console.log(`ACE context enhancement successful for chat ${chatId}:`, {
+            strategies_used: aceStats.strategies_used,
+            context_efficiency: aceStats.context_comparison
+          });
+        } else {
+          console.error('ACE context enhancement failed:', aceResult.error);
+          // Continue with regular system message
+        }
+      } catch (error) {
+        console.error('ACE processing error:', error);
+        // Continue with regular system message
+      }
+    }
+    
+    // Always use the main model (GPT-5 or configured model) for response generation
+    // ACE only enhances the context, it doesn't replace the main model
+    if (true) { // Always generate response with main model
+      if (!apiKey || apiKey.trim() === '' || apiKey === 'demo') {
       // Fallback response when no API key is available
       assistantMessage = "I'm a demo assistant. Please configure your AI provider API key in the settings to enable full functionality. You can use OpenAI, Anthropic (Claude), Google (Gemini), Azure OpenAI, Cohere, or Hugging Face models.";
     } else {
@@ -442,9 +568,12 @@ app.post('/api/chats/:chatId/messages', upload.single('file'), async (req, res) 
         const model = settings.model || "gpt-4";
         const isGPT5 = model.startsWith('gpt-5');
         
+        console.log(`🔍 Model detection: model="${model}", provider="${provider}", isGPT5=${isGPT5}`);
+        
         let completion;
         
         if (isGPT5 && provider === 'openai') {
+          console.log(`✅ Using GPT-5 path for model: ${model}`);
           // Use OpenAI SDK directly for GPT-5 models
           const OpenAI = require('openai');
           const openai = new OpenAI({ apiKey: apiKey });
@@ -458,8 +587,10 @@ app.post('/api/chats/:chatId/messages', upload.single('file'), async (req, res) 
           else effort = "high";
           
           // Create conversation history with the current message including file content
+          // Use enhanced system message from ACE if available, otherwise use default
+          const systemMessage = enhancedSystemMessage || settings.system_message || "You are a helpful assistant.";
           const conversationHistory = [
-            { role: "system", content: settings.system_message || "You are a helpful assistant." },
+            { role: "system", content: systemMessage },
             ...messages.slice(0, -1).map(msg => ({ role: msg.role, content: msg.content })),
             { role: "user", content: userContent }
           ];
@@ -591,8 +722,10 @@ app.post('/api/chats/:chatId/messages', upload.single('file'), async (req, res) 
           const startTime = Date.now();
           
           // Create conversation history with the current message including file content
+          // Use enhanced system message from ACE if available, otherwise use default
+          const systemMessage = enhancedSystemMessage || settings.system_message || "You are a helpful assistant.";
           const conversationHistory = [
-            { role: "system", content: settings.system_message || "You are a helpful assistant." },
+            { role: "system", content: systemMessage },
             ...messages.slice(0, -1).map(msg => ({ role: msg.role, content: msg.content })),
             { role: "user", content: userContent }
           ];
@@ -705,6 +838,51 @@ app.post('/api/chats/:chatId/messages', upload.single('file'), async (req, res) 
         assistantMessage = "Sorry, there was an error with the AI service. Please check your API key and try again. Error: " + error.message;
       }
     }
+    } // End of main model generation block
+
+    // If ACE was used for context enhancement, now reflect on the response and learn
+    if (aceUsed && acePlaybook && assistantMessage) {
+      try {
+        console.log(`Running ACE reflection for chat ${chatId}`);
+        
+        // Prepare conversation history for reflection
+        const conversationHistory = messages.slice(0, -1); // Exclude the current user message
+        
+        // Reflect on the response and learn from it
+        const reflectionResult = await aceManager.reflectAndLearn(chatId, userContent, assistantMessage, conversationHistory);
+        
+        if (reflectionResult.success) {
+          // Update ACE stats with reflection results
+          aceStats.reflection = reflectionResult.reflection;
+          aceStats.learned_strategies = reflectionResult.learned_strategies;
+          aceStats.playbook_size = reflectionResult.playbook_size;
+          
+          // Save updated playbook
+          const playbookData = aceManager.savePlaybook(chatId);
+          db.run(
+            'INSERT OR REPLACE INTO ace_playbooks (chat_id, playbook_data, updated_at) VALUES (?, ?, CURRENT_TIMESTAMP)',
+            [chatId, JSON.stringify(playbookData)],
+            (err) => {
+              if (err) {
+                console.error('Error saving playbook after reflection:', err);
+              } else {
+                console.log(`ACE playbook updated after reflection for chat ${chatId} - ${aceStats.playbook_size} strategies`);
+              }
+            }
+          );
+          
+          console.log(`ACE reflection successful for chat ${chatId}:`, {
+            learned_strategies: aceStats.learned_strategies,
+            playbook_size: aceStats.playbook_size,
+            has_reflection: !!aceStats.reflection
+          });
+        } else {
+          console.error('ACE reflection failed:', reflectionResult.error);
+        }
+      } catch (error) {
+        console.error('ACE reflection error:', error);
+      }
+    }
 
     // Save assistant message
     const assistantMessageId = uuidv4();
@@ -740,6 +918,12 @@ app.post('/api/chats/:chatId/messages', upload.single('file'), async (req, res) 
         role: 'assistant',
         content: assistantMessage,
         created_at: new Date().toISOString()
+      },
+      ace: aceUsed ? {
+        enabled: true,
+        stats: aceStats
+      } : {
+        enabled: false
       }
     });
 
@@ -824,12 +1008,102 @@ app.put('/api/settings', (req, res) => {
   });
   
   Promise.all(updatePromises)
-    .then(() => {
+    .then(async () => {
+      // If ACE settings were updated, reinitialize ACE Manager
+      if (settings.ace_enabled !== undefined || settings.ace_model !== undefined || settings.openai_api_key !== undefined) {
+        await initializeACEManager();
+      }
       res.json({ message: 'Settings updated successfully' });
     })
     .catch(err => {
       res.status(500).json({ error: err.message });
     });
+});
+
+// ACE-specific endpoints
+
+// Get ACE playbook statistics for a chat
+app.get('/api/chats/:chatId/ace/stats', (req, res) => {
+  const { chatId } = req.params;
+  
+  if (!aceManager) {
+    return res.json({ enabled: false, message: 'ACE is not enabled or initialized' });
+  }
+  
+  try {
+    const stats = aceManager.getPlaybookStats(chatId);
+    res.json({
+      enabled: true,
+      stats
+    });
+  } catch (error) {
+    console.error('Error getting ACE stats:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get learned strategies for a chat
+app.get('/api/chats/:chatId/ace/strategies', (req, res) => {
+  const { chatId } = req.params;
+  const limit = parseInt(req.query.limit) || 10;
+  
+  if (!aceManager) {
+    return res.json({ enabled: false, strategies: [] });
+  }
+  
+  try {
+    const strategies = aceManager.getLearnedStrategies(chatId, limit);
+    res.json({
+      enabled: true,
+      strategies
+    });
+  } catch (error) {
+    console.error('Error getting ACE strategies:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Clear ACE playbook for a chat
+app.delete('/api/chats/:chatId/ace/playbook', (req, res) => {
+  const { chatId } = req.params;
+  
+  if (!aceManager) {
+    return res.status(400).json({ error: 'ACE is not enabled or initialized' });
+  }
+  
+  try {
+    // Clear from memory
+    aceManager.clearPlaybook(chatId);
+    
+    // Clear from database
+    db.run(
+      'DELETE FROM ace_playbooks WHERE chat_id = ?',
+      [chatId],
+      function(err) {
+        if (err) {
+          console.error('Error clearing ACE playbook:', err);
+          res.status(500).json({ error: err.message });
+        } else {
+          res.json({ 
+            message: 'ACE playbook cleared successfully',
+            deleted_rows: this.changes
+          });
+        }
+      }
+    );
+  } catch (error) {
+    console.error('Error clearing ACE playbook:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get ACE status
+app.get('/api/ace/status', (req, res) => {
+  res.json({
+    enabled: !!aceManager,
+    initialized: !!aceManager?.llmClient,
+    model: aceManager?.model || null
+  });
 });
 
 // Health check

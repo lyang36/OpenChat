@@ -12,6 +12,11 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [aceStats, setAceStats] = useState<{
+    reflection: string | null;
+    learned_strategies: number;
+    playbook_size: number;
+  } | undefined>(undefined);
 
   // Load chats on component mount
   useEffect(() => {
@@ -50,6 +55,7 @@ function App() {
       const newChat = await chatApi.createChat();
       setChats(prev => [newChat, ...prev]);
       setCurrentChatId(newChat.id);
+      setAceStats(undefined); // Clear ACE stats for new chat
     } catch (error) {
       console.error('Error creating chat:', error);
     }
@@ -57,6 +63,7 @@ function App() {
 
   const handleSelectChat = (chatId: string) => {
     setCurrentChatId(chatId);
+    setAceStats(undefined); // Clear ACE stats when switching chats
     setSidebarOpen(false); // Close sidebar on mobile after selecting chat
   };
 
@@ -90,6 +97,11 @@ function App() {
     try {
       const response = await chatApi.sendMessage(currentChatId, message, file);
       setMessages(prev => [...prev, response.userMessage, response.assistantMessage]);
+      
+      // Update ACE stats if available
+      if (response.ace?.enabled && response.ace.stats) {
+        setAceStats(response.ace.stats);
+      }
       
       // Update chat title if it's the first message
       const currentChat = chats.find(chat => chat.id === currentChatId);
@@ -131,6 +143,7 @@ function App() {
         loading={loading}
         currentChatId={currentChatId}
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+        aceStats={aceStats}
       />
       <Settings
         isOpen={showSettings}

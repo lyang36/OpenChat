@@ -7,7 +7,7 @@ const litellm = require('litellm');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
-const { PDFParse } = require('pdf-parse');
+// PDF processing handled by PyMuPDF via Python script
 
 
 const { exec } = require('child_process');

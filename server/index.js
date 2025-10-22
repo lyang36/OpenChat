@@ -281,7 +281,7 @@ app.post('/api/chats/:chatId/messages', upload.single('file'), async (req, res) 
       else if (file.mimetype === 'application/pdf' || file.originalname.endsWith('.pdf')) {
         try {
           // Use Python script for robust PDF text and image extraction
-          const { stdout, stderr } = await execPromise(`python3 pdf_processor.py "${file.path}"`);
+          const { stdout, stderr } = await execPromise(`python3 pdf_processor.py "${file.path}"`, { maxBuffer: 50 * 1024 * 1024 }); // 50MB buffer
           const pdfResult = JSON.parse(stdout);
           
           if (pdfResult.success) {

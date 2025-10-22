@@ -280,13 +280,14 @@ app.post('/api/chats/:chatId/messages', upload.single('file'), async (req, res) 
       // Extract text and images from PDF files using Python PyMuPDF
       else if (file.mimetype === 'application/pdf' || file.originalname.endsWith('.pdf')) {
         try {
-          // Use Python script for robust PDF text and image extraction
-          const { stdout, stderr } = await execPromise(`python3 pdf_processor.py "${file.path}"`, { maxBuffer: 50 * 1024 * 1024 }); // 50MB buffer
+          // Use enhanced Python script for robust PDF text, image, and vector graphics extraction
+          const { stdout, stderr } = await execPromise(`python3 pdf_processor_enhanced.py "${file.path}"`, { maxBuffer: 50 * 1024 * 1024 }); // 50MB buffer
           const pdfResult = JSON.parse(stdout);
           
           if (pdfResult.success) {
             let pdfSummary = `PDF Content (${pdfResult.total_pages} pages):\n${pdfResult.full_text}`;
             
+            // Handle embedded bitmap images
             if (pdfResult.total_images > 0) {
               pdfSummary += `\n\n[Contains ${pdfResult.total_images} embedded image(s)]`;
               console.log(`PDF ${file.originalname} contains ${pdfResult.total_images} embedded images`);
@@ -296,12 +297,27 @@ app.post('/api/chats/:chatId/messages', upload.single('file'), async (req, res) 
               if (firstImage) {
                 pdfSummary += `\n[First image preview (page ${firstImage.page}): data:${firstImage.mime_type};base64,${firstImage.base64.substring(0, 100)}...]`;
               }
-            } else {
-              pdfSummary += `\n\n[No embedded images found in PDF]`;
+            }
+            
+            // Handle vector graphics and figures
+            if (pdfResult.total_drawings > 0) {
+              pdfSummary += `\n\n[Contains ${pdfResult.total_drawings} figure(s)/diagram(s) rendered as images]`;
+              console.log(`PDF ${file.originalname} contains ${pdfResult.total_drawings} vector graphics/figures`);
+              
+              // Include first figure as base64 preview
+              const firstDrawing = pdfResult.pages.flatMap(p => p.drawings)[0];
+              if (firstDrawing && firstDrawing.base64) {
+                pdfSummary += `\n[First figure preview (page ${firstDrawing.page}): data:${firstDrawing.mime_type};base64,${firstDrawing.base64.substring(0, 100)}...]`;
+              }
+            }
+            
+            // Summary message
+            if (pdfResult.total_images === 0 && pdfResult.total_drawings === 0) {
+              pdfSummary += `\n\n[No embedded images or figures found in PDF]`;
             }
             
             fileContent = pdfSummary;
-            console.log(`PDF ${file.originalname} processed - ${pdfResult.total_pages} pages, ${pdfResult.total_images} images`);
+            console.log(`PDF ${file.originalname} processed - ${pdfResult.total_pages} pages, ${pdfResult.total_images} images, ${pdfResult.total_drawings} figures`);
             console.log(`PDF extracted content:`, pdfResult.full_text.substring(0, 500) + (pdfResult.full_text.length > 500 ? '...' : ''));
           } else {
             throw new Error(pdfResult.error);
